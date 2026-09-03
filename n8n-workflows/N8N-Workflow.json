@@ -1,0 +1,1066 @@
+{
+  "name": "AI-Powered SOC  copy",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "c370fb8d-4460-41f0-8579-065c89507502",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -656,
+        -176
+      ],
+      "id": "9a2a4fea-84cd-4186-94a0-e0fc76321623",
+      "name": "Webhook",
+      "webhookId": "c370fb8d-4460-41f0-8579-065c89507502"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "499af165-b744-41a5-aa79-21b792d25b98",
+              "name": "message",
+              "value": "=🚨 ALERT: Critical risk on {{$json[\"body\"][\"target\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "2c9db74a-4fe0-48f3-afbc-6dbbeb30472e",
+              "name": "score",
+              "value": "={{$json[\"body\"][\"risk_score\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "0c2c05de-77b6-4ab2-9469-d0eecd59c531",
+              "name": "action",
+              "value": "={{$json[\"body\"][\"risk_level\"]}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -464,
+        -176
+      ],
+      "id": "f164bc27-72fc-401c-995b-b8cfeefaad2a",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "chatId": "8410598774",
+        "text": "=🚨 *AI SECURITY ALERT* 🚨\n\n🎯 *Target:* {{$json.message}}\n\n🧠 *Decision:* {{$json.decision}}\n🔥 *Priority:* {{$json.priority}} ({{$json.severity}})\n\n🧬 *Threat Type:* {{$json.threat_type}}\n🎯 *Attack Stage:* {{$json.attack_stage}}\n\n📊 *Risk Score:* {{$json.score}}\n\n🧠 *Reason:*\n{{$json.reason}}\n\n⚙️ *Automation:*\n🚫 Block: {{$json.block}}\n📣 Notify: {{$json.notify}}\n🎫 Ticket: {{$json.ticket}}\n\n━━━━━━━━━━━━━━━\n🤖 Automated SOC System\n",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        128
+      ],
+      "id": "8e95bf7f-7d97-4f14-9f03-4776e52b3bdf",
+      "name": "Send a text message",
+      "webhookId": "fcd0b713-712d-4089-b261-3b11767543b3",
+      "credentials": {
+        "telegramApi": {
+          "id": "vOuX0VX8u1kFlHnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔥 Clean AI output\nlet raw = $json.output || \"\";\nraw = raw.replace(/```json|```/g, \"\").trim();\n\nlet ai;\n\ntry {\n  ai = JSON.parse(raw);\n} catch (e) {\n  ai = {\n    decision: \"monitor\",\n    priority: \"P3\",\n    severity: \"medium\",\n    reason: \"AI parsing failed\",\n    automation: {\n      block_immediately: false,\n      notify_team: false,\n      create_ticket: false,\n      run_scan: false\n    }\n  };\n}\n\n// 🔥 PREVIOUS DATA\nconst prev = $items(\"Edit Fields\")[0].json;\nconst scoreNum = Number(prev.score) || 0;\n\n// 🔥 TARGET EXTRACTION\nlet extractedTarget = ai.target || null;\n\nif (!extractedTarget && prev.message) {\n  const urlMatch = prev.message.match(/https?:\\/\\/[^\\s]+/);\n  const domainMatch = prev.message.match(/\\b([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})\\b/);\n\n  if (urlMatch) {\n    try {\n      extractedTarget = new URL(urlMatch[0]).hostname;\n    } catch {}\n  }\n\n  if (!extractedTarget && domainMatch) {\n    extractedTarget = domainMatch[1];\n  }\n}\n\nif (!extractedTarget) extractedTarget = \"unknown\";\n\n// 🔥 WHITELIST\nconst whitelist = [\"google.com\", \"youtube.com\", \"cloudflare.com\"];\nconst isWhitelisted = whitelist.some(domain =>\n  extractedTarget.endsWith(domain)\n);\n\n// 🔥 SCORE LOGIC\nif (scoreNum >= 91) {\n  ai.decision = ai.decision === \"allow\" ? \"monitor\" : \"block\";\n  ai.priority = \"P1\";\n  ai.severity = \"critical\";\n}\nelse if (scoreNum >= 71) {\n  ai.decision = ai.decision === \"allow\" ? \"monitor\" : \"block\";\n  ai.priority = \"P2\";\n  ai.severity = \"high\";\n}\nelse if (scoreNum >= 31) {\n  ai.decision = \"monitor\";\n  ai.priority = \"P3\";\n  ai.severity = \"medium\";\n}\nelse {\n  ai.decision = \"allow\";\n  ai.priority = \"P4\";\n  ai.severity = \"low\";\n}\n\n// 🔥 WHITELIST SAFETY\nif (isWhitelisted && scoreNum < 70) {\n  ai.decision = \"allow\";\n  ai.priority = \"P4\";\n  ai.severity = \"low\";\n}\n\n// 🔥 UNKNOWN TARGET\nif (extractedTarget === \"unknown\") {\n  ai.priority = \"P2\";\n  ai.severity = \"high\";\n  ai.reason = \"Unknown target — investigate\";\n}\n\n// 🔥 AUTOMATION BASE RULES\nlet automation = {\n  block_immediately: false,\n  notify_team: false,\n  create_ticket: false,\n  run_scan: false\n};\n\nif (ai.decision === \"block\") {\n  automation = {\n    block_immediately: true,\n    notify_team: true,\n    create_ticket: true,\n    run_scan: true\n  };\n}\nelse if (ai.decision === \"monitor\") {\n  automation = {\n    block_immediately: false,\n    notify_team: scoreNum >= 60,\n    create_ticket: scoreNum >= 75,\n    run_scan: true\n  };\n}\n\n// 🔥 🔒 PHASE 8 SAFE BLOCK LOGIC (VERY IMPORTANT)\n\n// Only block if HIGH CONFIDENCE\nconst isHighConfidence =\n  ai.priority === \"P1\" &&\n  scoreNum >= 90;\n\n// Only allow IP (NO domains)\nconst isIP = /^[0-9.]+$/.test(extractedTarget);\n\n// FINAL BLOCK FLAG\nconst safeBlock = isHighConfidence && isIP;\n\n// TTL (auto unblock)\nconst blockTTL = 60;\n\n// 🔥 FINAL OUTPUT\nreturn [\n  {\n    json: {\n      decision: ai.decision,\n      priority: ai.priority,\n      severity: ai.severity,\n\n      target: extractedTarget,\n\n      threat_type: ai.threat_type || \"unknown\",\n      attack_stage: ai.attack_stage || \"unknown\",\n      reason: ai.reason || \"No reason provided\",\n\n      // ✅ FINAL FLAGS\n      block: safeBlock,          // 🔥 USE THIS IN IF\n      notify: automation.notify_team,\n      ticket: automation.create_ticket,\n\n      block_ttl_minutes: blockTTL,\n\n      domain_reputation: ai.enrichment?.domain_reputation || \"unknown\",\n      ip_reputation: ai.enrichment?.ip_reputation || \"unknown\",\n\n      message: prev.message,\n      score: scoreNum,\n      action: prev.action,\n\n      confidence: ai.confidence || 0.8,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        -512
+      ],
+      "id": "2ff0df7b-0684-498e-b012-53e59a1c1834",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -576,
+        -688
+      ],
+      "id": "9e325809-4320-40d8-a699-ab11d1b2a4ab",
+      "name": "When chat message received",
+      "webhookId": "e39201b3-60a7-470c-9b7c-b68571949103"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        160
+      ],
+      "id": "2a7358a6-bd52-444d-b3bb-a9cbfddd38b1",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "Oduzg2cXTNJfHt7B",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an advanced SOC cybersecurity AI. You MUST follow rules strictly.\n\nInput:\nTarget: {{$json.message}}\nRisk Score: {{$json.score}}\nSuggested Action: {{$json.action}}\n\n------------------------\nSTRICT RULES (NO EXCEPTIONS)\n\n1. Decision mapping (MANDATORY):\n- If Risk Score >= 91 → decision = \"block\"\n- If Risk Score >= 71 → decision = \"block\"\n- If Risk Score >= 31 → decision = \"monitor\"\n- If Risk Score <= 30 → decision = \"allow\"\n\n2. Severity:\n0–30 → low\n31–70 → medium\n71–90 → high\n91–100 → critical\n\n3. Priority:\ncritical → P1\nhigh → P2\nmedium → P3\nlow → P4\n\n4. Automation:\ncritical → ALL true\nhigh → notify_team + create_ticket = true\nmedium → notify_team = true\nlow → all false\n\n5. NEVER return \"allow\" if score >= 70\n\n------------------------\nOUTPUT FORMAT (STRICT JSON ONLY)\n\n{\n  \"target\": \"...\",\n  \"risk_score\": number,\n  \"severity\": \"...\",\n  \"decision\": \"...\",\n  \"priority\": \"...\",\n  \"threat_type\": \"...\",\n  \"attack_stage\": \"...\",\n  \"reason\": \"...\",\n  \"indicators\": [\"...\"],\n  \"enrichment\": {\n    \"domain_reputation\": \"...\",\n    \"ip_reputation\": \"...\",\n    \"is_known_scanner\": boolean,\n    \"geo_risk\": \"...\"\n  },\n  \"recommended_actions\": [\"...\"],\n  \"automation\": {\n    \"block_immediately\": boolean,\n    \"notify_team\": boolean,\n    \"create_ticket\": boolean,\n    \"run_scan\": boolean\n  },\n  \"confidence\": number,\n  \"timestamp\": \"ISO-8601\"\n}\n\n------------------------\nIMPORTANT:\n- Output MUST be valid JSON\n- No markdown\n- No explanation outside JSON\n- No extra text",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -272,
+        -160
+      ],
+      "id": "20f6f9aa-1996-4745-9987-436ba05c91bf",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://urging-exhale-stunner.ngrok-free.dev/block",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"target\": \"{{$json.target}}\",\n  \"ttl\": {{$json.block_ttl_minutes}}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1296,
+        -848
+      ],
+      "id": "a4a2d516-476e-49e4-840f-e48851420c8f",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "chatId": "8410598774",
+        "text": "=🚨 CRITICAL SOC ALERT\n\n🎯 Target: {{$json.target}}\n🔥 Priority: {{$json.priority}} | 📊 Severity: {{$json.severity}}\n\n🧠 Decision: {{$json.decision}}\n\n🦠 VirusTotal\n• Malicious: {{$json.vt_malicious}}\n• Suspicious: {{$json.vt_suspicious}}\n\n📝 Reason:\n{{$json.reason}}\n\n🕒 {{$json.timestamp}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1136,
+        -336
+      ],
+      "id": "a3a1e763-d7bc-45ff-a6c1-2033e45f9b0a",
+      "name": "Send a text message1",
+      "webhookId": "ed5f4dce-9488-4a42-8411-a618a19b3874",
+      "credentials": {
+        "telegramApi": {
+          "id": "vOuX0VX8u1kFlHnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "8410598774",
+        "text": "=🟡 SOC ALERT\n\n🎯 Target: {{$json.target}}\n🔥 Priority: {{$json.priority}} | 📊 Severity: {{$json.severity}}\n\n🧠 Decision: {{$json.decision}}\n\n🦠 VirusTotal\n• Malicious: {{$json.vt_malicious}}\n• Suspicious: {{$json.vt_suspicious}}\n\n📝 Reason:\n{{$json.reason}}\n\n🕒 {{$json.timestamp}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1024,
+        0
+      ],
+      "id": "069c22da-46a3-4ffc-a852-9e72945a03f0",
+      "name": "Send a text message2",
+      "webhookId": "2be68787-1684-417b-b56b-245c483bbba7",
+      "credentials": {
+        "telegramApi": {
+          "id": "vOuX0VX8u1kFlHnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -176,
+        176
+      ],
+      "id": "0cd945e6-66d9-4037-affb-194db83ebe91",
+      "name": "Simple Memory",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/domains/{{$json.target}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-apikey",
+              "value": "ed7f838f99e8a6362a3a5aca7763d2038ef83c4ceb6d8fb56b20d12a7113fca2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        320,
+        -752
+      ],
+      "id": "4c3ba10c-b7bd-4a84-9afc-2589e19f2b57",
+      "name": "VT ENRICHMENT"
+    },
+    {
+      "parameters": {
+        "jsCode": "const MALICIOUS_THRESHOLD = 5;\nconst SUSPICIOUS_THRESHOLD = 3;\n\nconst prev = $items(\"Code in JavaScript\")[0].json;\nconst vt = $json.data?.attributes?.last_analysis_stats || {};\n\nconst malicious = vt.malicious || 0;\nconst suspicious = vt.suspicious || 0;\nconst harmless = vt.harmless || 0;\n\nlet decision = prev.decision;\nlet priority = prev.priority;\nlet severity = prev.severity;\n\nlet vt_reason = \"No strong VT indicators\";\n\n// 🔥 VT LOGIC\nif (malicious >= MALICIOUS_THRESHOLD) {\n  decision = \"block\";\n  priority = \"P1\";\n  severity = \"critical\";\n  vt_reason = `${malicious} malicious engines`;\n}\nelse if (suspicious >= SUSPICIOUS_THRESHOLD) {\n  decision = \"monitor\";\n  priority = \"P2\";\n  severity = \"high\";\n  vt_reason = `${suspicious} suspicious engines`;\n}\nelse if (malicious === 0 && suspicious === 0) {\n  if (prev.score >= 70) {\n    decision = \"monitor\";\n    priority = \"P2\";\n    severity = \"high\";\n    vt_reason = \"High AI score, VT clean\";\n  }\n}\n\n// 🔥 MERGE REASON\nconst reason = `[AI] ${prev.reason} | [VT] ${vt_reason}`;\n\n// 🔥 ESCALATION\nconst urgent = (priority === \"P1\" || severity === \"critical\");\n\n// 🔥 SPAM CONTROL\nconst notify = !(\n  malicious === 0 &&\n  suspicious === 0 &&\n  prev.score < 40\n);\n\n// 🔥 OUTPUT\nreturn [\n  {\n    json: {\n      target: prev.target,\n      decision,\n      priority,\n      severity,\n      reason,\n\n      vt_malicious: malicious,\n      vt_suspicious: suspicious,\n      vt_harmless: harmless,\n\n      block: decision === \"block\",\n      notify,\n      ticket: decision !== \"allow\",\n      urgent,\n\n      score: prev.score,\n      message: prev.message,\n\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -576
+      ],
+      "id": "f9c159ed-83fa-407f-9253-9ff79cf873a9",
+      "name": "Parse VT"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Pt_zlvN26Y22Nc0TwEoZTGbxQQrwxO1HSuqkdu6Zpnc",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Pt_zlvN26Y22Nc0TwEoZTGbxQQrwxO1HSuqkdu6Zpnc/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "@"
+          ],
+          "schema": [
+            {
+              "id": "@",
+              "displayName": "@",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "decision",
+              "displayName": "decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vt_malicious",
+              "displayName": "vt_malicious",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vt_suspicious",
+              "displayName": "vt_suspicious",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vt_harmless",
+              "displayName": "vt_harmless",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "block",
+              "displayName": "block",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "notify",
+              "displayName": "notify",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ticket",
+              "displayName": "ticket",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        -992
+      ],
+      "id": "a3a8783a-a02d-4609-97ec-bbab7d12cdd9",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "2HsUtCOtSuRgeVmG",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const highConfidence =\n  $json.priority === \"P1\" &&\n  ($json.vt_malicious >= 3 || $json.repeat_count >= 3);\n\nconst isIP = /^[0-9.]+$/.test($json.target);\n\n$json.block = highConfidence && isIP;   // ✅ BOOLEAN\n\n$json.block_ttl_minutes = 60;\n\nreturn [{ json: $json }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -560
+      ],
+      "id": "a412da9d-1b1d-4125-9453-8350140d6887",
+      "name": "Code (block logic)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "826278c4-c567-4809-a75e-8cbe1595cd0e",
+              "leftValue": "={{$json.block}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        -512
+      ],
+      "id": "9d3acd55-f5b1-466a-ae82-73eb455acf46",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "529fa201-ec1a-4e08-abfc-10e713547eff",
+              "leftValue": "={{$json.urgent}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        816,
+        -256
+      ],
+      "id": "aa559ee1-7bab-407e-bdcd-e885d8657d19",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e2e296c0-e042-4816-ae26-83d869fab7ec",
+              "leftValue": "={{$json.notify}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        528,
+        -160
+      ],
+      "id": "dc7de7b2-2495-4a3a-bbae-a1568ad32ad0",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "chatId": "8410598774",
+        "text": "=🚨 AUTO BLOCK EXECUTED  🎯 IP: {{$json.target}} 🔥 Priority: {{$json.priority}}  🦠 VT Malicious: {{$json.vt_malicious}} ⏳ TTL: {{$json.block_ttl_minutes}} min  ✅ Firewall rule applied",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1536,
+        -736
+      ],
+      "id": "2a0cd64b-e4b2-4532-9062-97c5e5645473",
+      "name": "Send a text message3",
+      "webhookId": "b7e22768-2f30-43fa-b338-8d5e06211ffe",
+      "credentials": {
+        "telegramApi": {
+          "id": "vOuX0VX8u1kFlHnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1fW6OMirudCVq9FlrfrJYa-XRmA6vyx0bgfr-ZLpV_BY"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fW6OMirudCVq9FlrfrJYa-XRmA6vyx0bgfr-ZLpV_BY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1728,
+        -688
+      ],
+      "id": "9a307c47-1b9f-46b7-8844-39e9d667a744",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleApi": {
+          "id": "2HsUtCOtSuRgeVmG",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1Pt_zlvN26Y22Nc0TwEoZTGbxQQrwxO1HSuqkdu6Zpnc/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Pt_zlvN26Y22Nc0TwEoZTGbxQQrwxO1HSuqkdu6Zpnc/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        928,
+        -992
+      ],
+      "id": "28fe7687-e71d-4549-8109-e4d2325a648b",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "2HsUtCOtSuRgeVmG",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const current = $json;\nconst history = $input.all();\n\nlet repeatCount = 0;\n\n// 🔁 Count same target\nfor (const item of history) {\n  if (item.json.target === current.target) {\n    repeatCount++;\n  }\n}\n\n// Add correlation data\ncurrent.repeat_count = repeatCount;\n\n// 🔥 INTELLIGENT ESCALATION\nif (repeatCount >= 5) {\n  current.decision = \"block\";\n  current.priority = \"P1\";\n  current.severity = \"critical\";\n  current.correlation = \"Repeated attack (5+ times)\";\n}\nelse if (repeatCount >= 3) {\n  // Only escalate if not already critical\n  if (current.priority !== \"P1\") {\n    current.priority = \"P2\";\n    current.severity = \"high\";\n  }\n  current.correlation = \"Repeated suspicious activity\";\n}\nelse {\n  current.correlation = \"Single / low frequency\";\n}\n\n// 🔕 Reduce noise (SOC behavior)\nif (repeatCount < 2 && current.priority === \"P4\") {\n  current.notify = false;\n}\n\n// 🔐 Safety: never block domains accidentally\nconst isIP = /^[0-9.]+$/.test(current.target);\nif (!isIP) {\n  current.block = false;\n}\n\nreturn [{ json: current }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        -1104
+      ],
+      "id": "739f0231-e829-4753-aa3a-23820bc776b2",
+      "name": "Code (Correlation)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "56678275-6fb5-45f1-ab12-69c1a1947ec5",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "block",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        -1120
+      ],
+      "id": "3d9c9a9f-a8ff-468e-b2f9-7f130af62a31",
+      "name": "block or allow"
+    },
+    {
+      "parameters": {
+        "chatId": "8410598774",
+        "text": "=🚨 BLOCK EXECUTED  🎯 Target: {{$json.target}} 🔥 Priority: {{$json.priority}}  🦠 VT: {{$json.vt_malicious}} 🔁 Repeat: {{$json.repeat_count}}  ⏳ TTL: {{$json.block_ttl_minutes}} min  ⚠️ Action: Firewall rule applied",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1488,
+        -1184
+      ],
+      "id": "f635a5e7-44f3-48d8-8dbd-ce66bc53a1da",
+      "name": "Send a text message4",
+      "webhookId": "72070ad9-6945-40f3-a333-75727034583c",
+      "credentials": {
+        "telegramApi": {
+          "id": "vOuX0VX8u1kFlHnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "8410598774",
+        "text": "=⚠️ SOC ALERT  🎯 Target: {{$json.target}} 🔥 Priority: {{$json.priority}}  🦠 VT: {{$json.vt_malicious}} 🔁 Repeat: {{$json.repeat_count}}  🧠 Decision: {{$json.decision}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1472,
+        -1008
+      ],
+      "id": "26c14255-a295-4d41-8e37-af68db26c68d",
+      "name": "Send a text message5",
+      "webhookId": "5fcbf8ff-1e1c-49e6-aa5a-83c22224106c",
+      "credentials": {
+        "telegramApi": {
+          "id": "vOuX0VX8u1kFlHnI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1oxK7gp80tIqNB0oLGM_1uryESDJDaW2gNVPjgFyFRhs"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oxK7gp80tIqNB0oLGM_1uryESDJDaW2gNVPjgFyFRhs/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ok",
+              "displayName": "ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1680,
+        -1008
+      ],
+      "id": "58b28866-f118-41e6-85f5-15e1ada35b95",
+      "name": "Append row in sheet2",
+      "credentials": {
+        "googleApi": {
+          "id": "2HsUtCOtSuRgeVmG",
+          "name": "Google Service Account account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "VT ENRICHMENT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        []
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VT ENRICHMENT": {
+      "main": [
+        [
+          {
+            "node": "Parse VT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse VT": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code (block logic)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (block logic)": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code (Correlation)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (Correlation)": {
+      "main": [
+        [
+          {
+            "node": "block or allow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "block or allow": {
+      "main": [
+        [
+          {
+            "node": "Send a text message4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message5": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b4652e84-2239-46d7-97be-04fd27c45577",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5ceb1b97974019dd1f59de442d8ac63fb54dbdce8f0083c733d72bcd348343ee"
+  },
+  "id": "AtSr17Qxeo05ngFO",
+  "tags": []
+}
