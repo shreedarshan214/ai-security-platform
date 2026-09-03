@@ -7,9 +7,9 @@
 </p>
 
 <p align="center">
-  A modular cybersecurity platform that combines network scanning,
-  threat intelligence enrichment, risk scoring, Flask APIs, and n8n-based
-  security automation.
+  A modular cybersecurity platform that combines network scanning, threat intelligence
+  enrichment, risk scoring, Flask APIs, and n8n-based security automation to streamline
+  SOC (Security Operations Center) workflows.
 </p>
 
 <p align="center">
@@ -20,6 +20,14 @@
   <img src="https://img.shields.io/badge/n8n-SOC%20Automation-EA4B71?style=for-the-badge&logo=n8n&logoColor=white" />
   <img src="https://img.shields.io/badge/Google%20Sheets-Event%20Storage-34A853?style=for-the-badge&logo=googlesheets&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+</p>
+
+<p align="center">
+  <a href="#-installation">Installation</a> •
+  <a href="#-usage">Usage</a> •
+  <a href="#-n8n-automation-workflow">Automation</a> •
+  <a href="#-responsible-use">Responsible Use</a> •
+  <a href="#-contributing">Contributing</a>
 </p>
 
 ---
